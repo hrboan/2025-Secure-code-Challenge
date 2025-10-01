@@ -1,8 +1,7 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, HttpUrl, ValidationError
-from typing import List, Optional
+from pydantic import BaseModel, HttpUrl
+from typing import List
 from datetime import datetime
 import tldextract
 import re
@@ -47,7 +46,6 @@ def heuristic_score(url: str) -> int:
 
     # Brand impersonation in subdomain/path
     for b in BRANDS:
-        # brand present but not as registrable domain
         if b in u:
             score += 10
 
@@ -57,7 +55,7 @@ def heuristic_score(url: str) -> int:
     if url.count("?") + url.count("&") > 3:
         score += 5
 
-    # Lookalike characters (basic homograph-ish check)
+    # Lookalike characters
     if re.search(r"[@%]|0auth|paypa1|mícrosoft|faceb00k|g00gle", u):
         score += 12
 
@@ -85,24 +83,24 @@ def decision_from_score(score: int) -> str:
 # --- UI helpers ---
 HTML_HEAD = """
 <!doctype html>
-<html lang=\"ko\">
+<html lang="ko">
   <head>
-    <meta charset=\"utf-8\"> 
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+    <meta charset="utf-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Phish Investigator — 메인</title>
-    <script src=\"https://unpkg.com/htmx.org@1.9.12\" integrity=\"sha384-lGZ+WZ+oJ1q9tAj0b1YqY3mJt2eX1d7z5VqO0KZP4m9tZ0p0x2mOo5r3i6bJmVvY\" crossorigin=\"anonymous\"></script>
-    <script src=\"https://cdn.tailwindcss.com\"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body class=\"bg-slate-50 text-slate-900\">
-    <div class=\"max-w-6xl mx-auto p-6\">
-      <header class=\"mb-6\">
-        <h1 class=\"text-2xl font-bold\">🔎 Phish Investigator</h1>
-        <p class=\"text-sm text-slate-600\">의심 URL을 즉시 조사하여 연관 인프라를 묶고 정책에 따라 차단/신고까지 자동화하는 시스템 (메인 페이지 MVP)</p>
+  <body class="bg-slate-50 text-slate-900">
+    <div class="max-w-6xl mx-auto p-6">
+      <header class="mb-6">
+        <h1 class="text-2xl font-bold">🔎 Phish Investigator</h1>
+        <p class="text-sm text-slate-600">의심 URL을 즉시 조사하여 연관 인프라를 묶고 정책에 따라 차단/신고까지 자동화하는 시스템 (메인 페이지 MVP)</p>
       </header>
 """
 
 HTML_FOOT = """
-      <footer class=\"mt-10 text-xs text-slate-500\">
+      <footer class="mt-10 text-xs text-slate-500">
         <p>Made with FastAPI · HTMX · Tailwind — MVP (데모 점수/결정 로직)</p>
       </footer>
     </div>
@@ -124,29 +122,29 @@ def render_recent_table(items: List[Investigation]) -> str:
         )
         rows.append(
             f"""
-            <tr class=\"border-b last:border-0\">
-              <td class=\"py-3 align-top\"><div class=\"font-mono text-xs break-all\">{it.url}</div><div class=\"text-[11px] text-slate-500\">{it.domain}</div></td>
-              <td class=\"py-3 align-top\">{it.submitted_at.strftime('%Y-%m-%d %H:%M:%S')}</td>
-              <td class=\"py-3 align-top\"><span class=\"px-2 py-1 rounded-full text-xs {badge}\">{it.score}</span></td>
-              <td class=\"py-3 align-top\">{it.decision}</td>
-              <td class=\"py-3 align-top\"><span class=\"text-xs\">{it.status}</span></td>
+            <tr class="border-b last:border-0">
+              <td class="py-3 align-top"><div class="font-mono text-xs break-all">{it.url}</div><div class="text-[11px] text-slate-500">{it.domain}</div></td>
+              <td class="py-3 align-top">{it.submitted_at.strftime('%Y-%m-%d %H:%M:%S')}</td>
+              <td class="py-3 align-top"><span class="px-2 py-1 rounded-full text-xs {badge}">{it.score}</span></td>
+              <td class="py-3 align-top">{it.decision}</td>
+              <td class="py-3 align-top"><span class="text-xs">{it.status}</span></td>
             </tr>
             """
         )
 
     table = f"""
-    <div class=\"overflow-hidden rounded-2xl shadow bg-white\">
-      <table class=\"w-full text-sm\">
-        <thead class=\"bg-slate-100 text-slate-700\">
+    <div class="overflow-hidden rounded-2xl shadow bg-white">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-100 text-slate-700">
           <tr>
-            <th class=\"text-left px-4 py-2\">URL</th>
-            <th class=\"text-left px-4 py-2\">제출 시각</th>
-            <th class=\"text-left px-4 py-2\">점수</th>
-            <th class=\"text-left px-4 py-2\">결정</th>
-            <th class=\"text-left px-4 py-2\">상태</th>
+            <th class="text-left px-4 py-2">URL</th>
+            <th class="text-left px-4 py-2">제출 시각</th>
+            <th class="text-left px-4 py-2">점수</th>
+            <th class="text-left px-4 py-2">결정</th>
+            <th class="text-left px-4 py-2">상태</th>
           </tr>
         </thead>
-        <tbody class=\"divide-y\">
+        <tbody class="divide-y">
           {''.join(rows)}
         </tbody>
       </table>
@@ -158,23 +156,23 @@ def render_recent_table(items: List[Investigation]) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def index(_: Request):
     form_html = """
-    <section class=\"mb-8\">
-      <form hx-post=\"/investigate\" hx-target=\"#recent\" hx-swap=\"innerHTML\" class=\"flex gap-2 items-end\">
-        <div class=\"flex-1\">
-          <label for=\"url\" class=\"block text-sm font-medium text-slate-700\">의심 URL</label>
-          <input type=\"url\" id=\"url\" name=\"url\" required placeholder=\"https://bank.example-login.com/login\" class=\"mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-700\" />
+    <section class="mb-8">
+      <form hx-post="/investigate" hx-target="#recent" hx-swap="innerHTML" class="flex gap-2 items-end">
+        <div class="flex-1">
+          <label for="url" class="block text-sm font-medium text-slate-700">의심 URL</label>
+          <input type="url" id="url" name="url" required placeholder="https://bank.example-login.com/login" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-700" />
         </div>
-        <button type=\"submit\" class=\"h-10 px-4 rounded-xl bg-slate-900 text-white text-sm shadow\">조사 시작</button>
+        <button type="submit" class="h-10 px-4 rounded-xl bg-slate-900 text-white text-sm shadow">조사 시작</button>
       </form>
-      <p class=\"mt-2 text-xs text-slate-500\">제출 즉시 점수와 정책 결정을 보여줍니다. (데모: 로컬 휴리스틱 사용)</p>
+      <p class="mt-2 text-xs text-slate-500">제출 즉시 점수와 정책 결정을 보여줍니다. (데모: 로컬 휴리스틱 사용)</p>
     </section>
     """
 
     recent_html = f"""
     <section>
-      <div class=\"flex items-center justify-between mb-2\">
-        <h2 class=\"text-lg font-semibold\">최근 조사</h2>
-        <button class=\"text-xs underline\" hx-get=\"/recent\" hx-target=\"#recent\" hx-swap=\"innerHTML\">새로고침</button>
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold">최근 조사</h2>
+        <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
       </div>
       {render_recent_table(STORE)}
     </section>
@@ -186,20 +184,24 @@ async def index(_: Request):
 @app.get("/recent", response_class=HTMLResponse)
 async def recent():
     html = f"""
-    <div class=\"flex items-center justify-between mb-2\">
-      <h2 class=\"text-lg font-semibold\">최근 조사</h2>
-      <button class=\"text-xs underline\" hx-get=\"/recent\" hx-target=\"#recent\" hx-swap=\"innerHTML\">새로고침</button>
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">최근 조사</h2>
+      <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
     </div>
     {render_recent_table(STORE)}
     """
     return html
 
 
+# ✅ 수정된 부분
+class UrlModel(BaseModel):
+    url: HttpUrl
+
 @app.post("/investigate", response_class=HTMLResponse)
 async def investigate(url: str = Form(...)):
-    # Validate URL
+    # Validate URL (올바른 방식)
     try:
-        HttpUrl.validate(url)
+        UrlModel(url=url)
     except Exception:
         return "<p class='text-red-600 text-sm'>유효한 URL이 아닙니다.</p>"
 
@@ -214,25 +216,23 @@ async def investigate(url: str = Form(...)):
         url=url,
         domain=domain or "(unknown)",
         submitted_at=datetime.now(),
-        status="analyzed",  # 데모: 즉시 분석 처리
+        status="analyzed",
         score=score,
         decision=decision,
         notes="Demo heuristic only — 실제 시스템에서는 Collector/Analyzer를 통해 패시브DNS/WHOIS/SSL/VT 점수를 합산합니다.",
     )
     STORE.insert(0, inv)
 
-    # Return refreshed recent table section for HTMX swap
     html = f"""
-    <div class=\"flex items-center justify-between mb-2\">
-      <h2 class=\"text-lg font-semibold\">최근 조사</h2>
-      <button class=\"text-xs underline\" hx-get=\"/recent\" hx-target=\"#recent\" hx-swap=\"innerHTML\">새로고침</button>
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">최근 조사</h2>
+      <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
     </div>
     {render_recent_table(STORE)}
     """
     return html
 
 
-# --- Local dev entrypoint ---
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
