@@ -109,18 +109,23 @@ HTML_FOOT = """
 """
 
 
-# --- 테이블 렌더링 (여백 추가 완료) ---
+# --- 테이블 렌더링 (색상 + 라벨 표시) ---
 def render_recent_table(items: List[Investigation]) -> str:
     if not items:
         return "<p class='text-sm text-slate-500'>아직 기록이 없습니다.</p>"
 
     rows = []
     for it in items[:20]:
-        badge = (
-            "bg-red-600 text-white" if it.score >= 80 else
-            "bg-orange-500 text-white" if it.score >= 50 else
-            "bg-slate-700 text-white"
-        )
+        if it.score >= 80:
+            badge = "bg-red-600 text-white"     # 빨강
+            label = "위험"
+        elif 50 <= it.score < 80:
+            badge = "bg-yellow-400 text-black"  # 노랑
+            label = "주의"
+        else:
+            badge = "bg-blue-600 text-white"    # 파랑
+            label = "안전"
+
         rows.append(
             f"""
             <tr class="border-b last:border-0">
@@ -130,7 +135,9 @@ def render_recent_table(items: List[Investigation]) -> str:
               </td>
               <td class="py-3 px-4 align-top">{it.submitted_at.strftime('%Y-%m-%d %H:%M:%S')}</td>
               <td class="py-3 px-4 align-top">
-                <span class="px-2 py-1 rounded-full text-xs {badge}">{it.score}</span>
+                <span class="px-3 py-1 rounded-full text-xs {badge}">
+                  {it.score} {label}
+                </span>
               </td>
               <td class="py-3 px-4 align-top">{it.decision}</td>
               <td class="py-3 px-4 align-top"><span class="text-xs">{it.status}</span></td>
