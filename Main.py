@@ -188,7 +188,7 @@ async def index(_: Request):
         <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
       </div>
       {render_recent_table(STORE)}
-    </section>
+    </section>  
     """
 
     return HTML_HEAD + form_html + f"<div id='recent'>{recent_html}</div>" + HTML_FOOT
