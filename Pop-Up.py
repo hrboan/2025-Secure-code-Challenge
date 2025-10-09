@@ -43,7 +43,7 @@ def heuristic_score(url: str) -> int:
 def decision_from_score(score: int) -> str:
     if score >= 80:
         return "위험"
-    if 50 <= score < 80:
+    if 30 <= score < 80:
         return "주의"
     return "안전"
 
