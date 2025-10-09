@@ -7,6 +7,8 @@ import tldextract
 import re
 import uuid
 import urllib.parse
+import socket
+from ipwhois import IPWhois
 
 app = FastAPI(title="Phish Investigator — Main")
 
@@ -95,19 +97,17 @@ HTML_FOOT = """
 def render_recent_table(items: List[Investigation]) -> str:
     if not items:
         return "<p class='text-sm text-slate-500'>아직 기록이 없습니다.</p>"
-
     rows = []
     for it in items[:20]:
         if it.score >= 80:
             badge = "bg-red-600 text-white"
             label = "위험"
-        elif 30 <= it.score < 80:
+        elif 50 <= it.score < 80:
             badge = "bg-yellow-400 text-black"
             label = "주의"
         else:
             badge = "bg-blue-600 text-white"
             label = "안전"
-
         rows.append(
             f"""
             <tr class="border-b last:border-0">
@@ -126,7 +126,6 @@ def render_recent_table(items: List[Investigation]) -> str:
             </tr>
             """
         )
-
     return f"""
     <div class="overflow-hidden rounded-2xl shadow bg-white">
       <table class="w-full text-sm">
@@ -164,7 +163,6 @@ async def index(_: Request):
       </p>
     </section>
     """
-
     recent_html = f"""
     <section>
       <div class="flex items-center justify-between mb-2">
@@ -174,38 +172,50 @@ async def index(_: Request):
       {render_recent_table(STORE)}
     </section>
     """
+    return HTML_HEAD + form_html + f"<div id='recent'>{recent_html}</div>" + HTML_FOOT
 
-    # 모달 표시용 오버레이 영역 추가
-    return HTML_HEAD + form_html + f"<div id='recent'>{recent_html}</div><div id='overlay'></div>" + HTML_FOOT
-
-# --- 최근 목록 갱신 ---
 @app.get("/recent", response_class=HTMLResponse)
 async def recent():
-    return f"""
+    html = f"""
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-lg font-semibold">최근 조사</h2>
       <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
     </div>
     {render_recent_table(STORE)}
     """
+    return html
 
-# --- URL 검증 ---
+# --- URL 검증 모델 ---
 class UrlModel(BaseModel):
     url: HttpUrl
 
-# --- 조사 로직 (팝업 모달 트리거 포함) ---
+# --- 조사 로직 + WHOIS/IP 조회 ---
 @app.post("/investigate", response_class=HTMLResponse)
 async def investigate(url: str = Form(...)):
+    # URL 검증
     try:
         UrlModel(url=url)
     except Exception:
         return "<p class='text-red-600 text-sm'>유효한 URL이 아닙니다.</p>"
 
+    # 도메인/IP 추출
     ext = tldextract.extract(url)
     domain = ".".join([p for p in [ext.domain, ext.suffix] if p])
+
+    ip_addr = None
+    whois_data = None
+    try:
+        ip_addr = socket.gethostbyname(domain)
+        w = IPWhois(ip_addr)
+        whois_data = w.lookup_rdap()
+    except Exception as e:
+        whois_data = {"error": str(e)}
+
+    # 점수 및 결정
     score = heuristic_score(url)
     decision = decision_from_score(score)
 
+    # 조사 기록 저장
     inv = Investigation(
         id=str(uuid.uuid4()),
         url=url,
@@ -214,28 +224,39 @@ async def investigate(url: str = Form(...)):
         status="analyzed",
         score=score,
         decision=decision,
+        notes=f"IP: {ip_addr or 'N/A'}",
     )
     STORE.insert(0, inv)
 
-    # 주의/위험 단계면 Pop-Up 서버의 fragment 로드
-    popup_script = ""
-    if score >= 30:
-        encoded_url = urllib.parse.quote(url)
-        popup_script = f"""
-        <script>
-          htmx.ajax('GET',
-            'http://127.0.0.1:8001/fragment?url={encoded_url}&score={score}&decision={urllib.parse.quote(decision)}',
-            '#overlay');
-        </script>
+    # WHOIS 박스 (테이블 아래)
+    whois_html = ""
+    if whois_data:
+        whois_html += """
+        <div class="mt-4 bg-white rounded-2xl shadow p-4 text-sm">
+          <h3 class="text-base font-semibold mb-2">🌍 WHOIS 정보</h3>
         """
+        if ip_addr:
+            whois_html += f"<p><b>IP:</b> {ip_addr}</p>"
+        if "network" in whois_data:
+            net = whois_data["network"]
+            whois_html += f"<p><b>Name:</b> {net.get('name')}</p>"
+            whois_html += f"<p><b>Country:</b> {net.get('country')}</p>"
+            whois_html += f"<p><b>Handle:</b> {net.get('handle')}</p>"
+        if "asn" in whois_data:
+            whois_html += f"<p><b>ASN:</b> {whois_data.get('asn')}</p>"
+        whois_html += "</div>"
 
     html = f"""
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="text-lg font-semibold">최근 조사</h2>
-      <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
+    <div class="flex flex-col gap-6">
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-semibold">최근 조사</h2>
+          <button class="text-xs underline" hx-get="/recent" hx-target="#recent" hx-swap="innerHTML">새로고침</button>
+        </div>
+        {render_recent_table(STORE)}
+      </div>
+      {whois_html}
     </div>
-    {render_recent_table(STORE)}
-    {popup_script}
     """
     return html
 
