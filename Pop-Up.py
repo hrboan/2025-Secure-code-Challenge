@@ -1,122 +1,78 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel, HttpUrl
-from datetime import datetime
-import tldextract, re, uuid
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from urllib.parse import unquote
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Phish Investigator — Pop-Up Alert")
+app = FastAPI(title="Phish Investigator — Popup Fragment")
 
-BAD_WORDS = [
-    "login", "verify", "secure", "wallet", "invoice", "billing",
-    "account", "bank", "update", "password", "signin", "onedrive",
-]
-
-SUSPICIOUS_TLDS = ["zip", "mov", "top", "xyz", "gq", "tk", "cf", "ml", "ga"]
-BRANDS = ["microsoft", "apple", "naver", "kakao", "nh", "kb", "woori", "line", "pay"]
-
-# 휴리스틱 점수 계산
-def heuristic_score(url: str) -> int:
-    score = 0
-    u = url.lower()
-    for w in BAD_WORDS:
-        if w in u:
-            score += 8
-    for b in BRANDS:
-        if b in u:
-            score += 10
-    if len(url) > 120:
-        score += 5
-    if url.count("?") + url.count("&") > 3:
-        score += 5
-    if re.search(r"[@%]|0auth|paypa1|mícrosoft|faceb00k|g00gle", u):
-        score += 12
-    ext = tldextract.extract(url)
-    tld = (ext.suffix or "").split(".")[-1]
-    if tld in SUSPICIOUS_TLDS:
-        score += 10
-    if ext.subdomain and len(ext.subdomain.split('.')) >= 2:
-        score += 6
-    return min(score, 100)
+# CORS 허용 (Main:8000 → Popup:8001)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# 정책 결정
-def decision_from_score(score: int) -> str:
-    if score >= 80:
-        return "위험"
-    if 30 <= score < 80:
-        return "주의"
-    return "안전"
+@app.get("/fragment", response_class=HTMLResponse)
+async def popup_fragment(url: str = "", score: str = "", decision: str = ""):
+    url = unquote(url)
+    score_int = int(score) if score.isdigit() else 0
 
-
-# --- UI ---
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html>
-    <head>
-        <title>Phish Investigator — Pop-Up Demo</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-50 flex items-center justify-center h-screen">
-        <div class="text-center bg-white p-8 rounded-2xl shadow-md w-[400px]">
-            <h1 class="text-2xl font-bold mb-4">🔎 Phish Investigator</h1>
-            <form method="post" action="/check" class="flex flex-col gap-4">
-                <input name="url" type="url" placeholder="https://example-login.com" required
-                    class="rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-700"/>
-                <button type="submit" class="bg-slate-900 text-white py-2 rounded-xl shadow">조사 시작</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    """
-
-
-# --- 점수 분석 및 팝업 처리 ---
-@app.post("/check", response_class=HTMLResponse)
-async def check_url(url: str = Form(...)):
-    score = heuristic_score(url)
-    decision = decision_from_score(score)
-
-    # 결과 텍스트
-    message = f"{url} 의 점수는 {score}점이며, 상태는 '{decision}' 입니다."
-
-    # 주의 / 위험 단계에서는 팝업(alert) + 신고 페이지 버튼
-    if decision in ["주의", "위험"]:
-        return f"""
-        <html>
-        <head>
-            <script>
-                alert("{message}\\n⚠️ 위험 URL이 감지되었습니다!");
-                function goReport() {{
-                    window.location.href = "https://phishing.gov.kr"; // 악성 사이트 신고 페이지
-                }}
-            </script>
-        </head>
-        <body class="flex items-center justify-center h-screen bg-slate-50">
-            <div class="text-center bg-white p-8 rounded-2xl shadow-md w-[400px]">
-                <h2 class="text-xl font-semibold mb-4">🚨 {decision} 단계 감지</h2>
-                <p class="mb-6 text-sm text-slate-700">{message}</p>
-                <button onclick="goReport()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow">
-                    🔗 악성 사이트 신고하기
-                </button>
-            </div>
-        </body>
-        </html>
-        """
+    # 색상 및 라벨 구분
+    if score_int >= 80:
+        color = "bg-red-100 text-red-800"
+        label = "🚨 위험"
     else:
-        # 안전 단계면 팝업 없이 결과만 표시
-        return f"""
-        <html>
-        <head><script>alert("{message}\\n✅ 안전 URL로 판단되었습니다.");</script></head>
-        <body class="flex items-center justify-center h-screen bg-slate-50">
-            <div class="text-center bg-white p-8 rounded-2xl shadow-md w-[400px]">
-                <h2 class="text-xl font-semibold mb-4">✅ 안전한 URL</h2>
-                <p class="text-slate-700">{message}</p>
-                <a href="/" class="mt-6 inline-block text-blue-600 underline">돌아가기</a>
-            </div>
-        </body>
-        </html>
-        """
+        color = "bg-yellow-100 text-yellow-800"
+        label = "⚠️ 주의"
+
+    # 모달 HTML + fade-out 애니메이션 포함
+    return f"""
+    <style>
+      @keyframes fadeOut {{
+        0% {{ opacity: 1; }}
+        100% {{ opacity: 0; }}
+      }}
+      .fade-out {{
+        animation: fadeOut 0.3s ease forwards;
+      }}
+    </style>
+
+    <div id="popup-modal" class="fixed inset-0 flex items-center justify-center z-50 transition-opacity duration-300">
+      <!-- 배경 클릭 시 닫기 -->
+      <div class="absolute inset-0 bg-black/40" onclick="closeModal()"></div>
+
+      <div class="relative bg-white rounded-xl p-6 shadow max-w-md z-60 transform transition-all">
+        <h3 class="text-lg font-semibold mb-2 {color} px-2 py-1 rounded">{label}</h3>
+        <p class="text-sm text-slate-700 mb-4">
+          의심 URL:<br><span class="font-mono text-xs break-all">{url}</span>
+        </p>
+        <p class="mb-4">탐지 점수: <strong>{score}</strong></p>
+
+        <div class="flex gap-2 justify-end">
+          <a href="https://phishing.gov.kr" target="_blank"
+             class="bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700">신고하기</a>
+          <button onclick="closeModal()" 
+                  class="bg-slate-200 px-4 py-2 rounded-xl hover:bg-slate-300">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 닫기 함수 (fade-out 애니메이션 후 제거)
+      function closeModal() {{
+        const modal = document.getElementById('popup-modal');
+        if (modal) {{
+          modal.classList.add('fade-out');
+          setTimeout(() => modal.remove(), 300); // 0.3초 후 완전 제거
+        }}
+      }}
+    </script>
+    """
 
 
 if __name__ == "__main__":
