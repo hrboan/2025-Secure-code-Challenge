@@ -119,7 +119,7 @@ def render_recent_table(items: List[Investigation]) -> str:
         if it.score >= 80:
             badge = "bg-red-600 text-white"     # 빨강
             label = "위험"
-        elif 50 <= it.score < 80:
+        elif 30 <= it.score < 80:
             badge = "bg-yellow-400 text-black"  # 노랑
             label = "주의"
         else:
