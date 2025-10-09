@@ -12,8 +12,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
+) 
 
 @app.get("/fragment", response_class=HTMLResponse)
 async def popup_fragment(url: str = "", score: str = "", decision: str = ""):
